@@ -6,14 +6,12 @@
 ![scikit-learn](https://img.shields.io/badge/scikit--learn-ML-yellow?logo=scikitlearn)
 ![License](https://img.shields.io/badge/License-MIT-brightgreen)
 ![Status](https://img.shields.io/badge/Status-Active-success)
+
+🚀 **An intelligent Machine Learning–based system** that detects spam comments on YouTube videos using **Natural Language Processing (NLP)** and **classification algorithms**.
+
 <p>
 <img width="1874" height="985" alt="image" src="https://github.com/user-attachments/assets/87d2e965-1611-45eb-8ce3-8240f9333daf" />
 </p>
-
-
----
-
-🚀 **An intelligent Machine Learning–based system** that detects spam comments on YouTube videos using **Natural Language Processing (NLP)** and **classification algorithms**.
 
 ---
 
