@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { CommentAnalysis } from "../types";
 
@@ -82,5 +81,48 @@ export const fetchAndAnalyzeFromUrl = async (url: string): Promise<CommentAnalys
   } catch (error) {
     console.error("Gemini URL Simulation Error:", error);
     throw error;
+  }
+};
+
+/**
+ * Simulates polling for a few new comments for live monitoring.
+ */
+export const fetchRecentComments = async (url: string): Promise<CommentAnalysis[]> => {
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: `Generate 1-2 new incoming comments for this YouTube video: ${url}. 
+                 Occasionally make one a spam comment (30% chance). Analyze them.`,
+      config: {
+        systemInstruction: "You are a real-time YouTube comment feed simulator. Provide 1 or 2 new comments that just arrived.",
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              text: { type: Type.STRING },
+              isSpam: { type: Type.BOOLEAN },
+              confidence: { type: Type.NUMBER },
+              category: { 
+                type: Type.STRING, 
+                enum: ['Spam', 'Scam', 'Self-Promotion', 'Bot', 'Safe'] 
+              },
+              reason: { type: Type.STRING }
+            },
+            required: ["text", "isSpam", "confidence", "category", "reason"]
+          }
+        }
+      }
+    });
+
+    const rawResults = JSON.parse(response.text || "[]");
+    return rawResults.map((r: any) => ({
+      ...r,
+      id: Math.random().toString(36).substr(2, 9)
+    }));
+  } catch (error) {
+    console.error("Gemini Live Polling Error:", error);
+    return [];
   }
 };
