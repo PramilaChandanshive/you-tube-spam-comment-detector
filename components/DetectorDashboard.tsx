@@ -1,6 +1,6 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { analyzeComment, fetchAndAnalyzeFromUrl } from '../services/geminiService';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { analyzeComment, fetchAndAnalyzeFromUrl, fetchRecentComments } from '../services/geminiService';
 import { CommentAnalysis, Stats } from '../types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
 
@@ -18,7 +18,10 @@ const DetectorDashboard: React.FC<DetectorDashboardProps> = ({ onBack }) => {
   const [loading, setLoading] = useState(false);
   const [loadingStage, setLoadingStage] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [activeVideo, setActiveVideo] = useState<{ title: string; channel: string; id: string } | null>(null);
+  const [activeVideo, setActiveVideo] = useState<{ title: string; channel: string; id: string; url: string } | null>(null);
+  const [isMonitoring, setIsMonitoring] = useState(false);
+  
+  const monitorIntervalRef = useRef<number | null>(null);
 
   const stats: Stats = useMemo(() => {
     if (results.length === 0) return { total: 0, spam: 0, safe: 0, averageConfidence: 0 };
@@ -44,6 +47,23 @@ const DetectorDashboard: React.FC<DetectorDashboardProps> = ({ onBack }) => {
     { name: 'Safe', value: stats.safe, color: '#00e676' }
   ];
 
+  // Live Monitoring Effect
+  useEffect(() => {
+    if (isMonitoring && activeVideo) {
+      monitorIntervalRef.current = window.setInterval(async () => {
+        const newComments = await fetchRecentComments(activeVideo.url);
+        if (newComments.length > 0) {
+          setResults(prev => [...newComments, ...prev]);
+        }
+      }, 8000); // Check every 8 seconds for simulation
+    } else {
+      if (monitorIntervalRef.current) clearInterval(monitorIntervalRef.current);
+    }
+    return () => {
+      if (monitorIntervalRef.current) clearInterval(monitorIntervalRef.current);
+    };
+  }, [isMonitoring, activeVideo]);
+
   const handleManualAnalyze = async () => {
     if (!textInput.trim()) return;
     setLoading(true);
@@ -59,6 +79,7 @@ const DetectorDashboard: React.FC<DetectorDashboardProps> = ({ onBack }) => {
       setResults(prev => [...newResults, ...prev]);
       setTextInput('');
       setActiveVideo(null);
+      setIsMonitoring(false);
     } catch (err) {
       setError('Analysis failed. Please check your connection.');
     } finally {
@@ -75,8 +96,8 @@ const DetectorDashboard: React.FC<DetectorDashboardProps> = ({ onBack }) => {
 
     setLoading(true);
     setError(null);
+    setIsMonitoring(false);
     
-    // Simulated multi-stage loading for "attractiveness"
     const stages = [
       'Locating video metadata...',
       'Accessing comment stream...',
@@ -93,18 +114,17 @@ const DetectorDashboard: React.FC<DetectorDashboardProps> = ({ onBack }) => {
 
     try {
       const simulatedResults = await fetchAndAnalyzeFromUrl(urlInput);
-      
-      // Simulated video info based on URL or generic
       const videoIdMatch = urlInput.match(/(?:v=|\/)([a-zA-Z0-9_-]{11})/);
       const vId = videoIdMatch ? videoIdMatch[1] : 'unknown';
       
       setActiveVideo({
         title: "Latest Video Insights & Discussions",
-        channel: "Verified Channel Content",
-        id: vId
+        channel: "Verified Creator Content",
+        id: vId,
+        url: urlInput
       });
 
-      setResults(simulatedResults); // Replace instead of append for better "new scan" feel
+      setResults(simulatedResults);
       setUrlInput('');
     } catch (err) {
       setError('Failed to fetch from URL. The video might be restricted.');
@@ -127,9 +147,9 @@ const DetectorDashboard: React.FC<DetectorDashboardProps> = ({ onBack }) => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-8 animate-in fade-in duration-500">
+    <div className="max-w-7xl mx-auto p-4 md:p-8 animate-in fade-in duration-500 pb-32">
       {/* Header */}
-      <div className="flex justify-between items-center mb-10">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
         <div className="flex items-center gap-6">
           <button 
             onClick={onBack}
@@ -143,9 +163,21 @@ const DetectorDashboard: React.FC<DetectorDashboardProps> = ({ onBack }) => {
           <div className="h-8 w-px bg-white/10 hidden sm:block" />
           <h1 className="text-2xl font-bold tracking-tight">AI Moderation <span className="text-yt-red">Engine</span></h1>
         </div>
-        <div className="hidden sm:flex items-center gap-3 text-xs font-semibold text-gray-500 bg-black/40 px-5 py-2.5 rounded-2xl border border-white/5 shadow-2xl">
-          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-          GEMINI 3 PRO ACTIVE
+        
+        <div className="flex items-center gap-4">
+           {activeVideo && (
+             <button 
+              onClick={() => setIsMonitoring(!isMonitoring)}
+              className={`flex items-center gap-3 px-6 py-2.5 rounded-2xl border transition-all font-black text-xs uppercase tracking-widest ${isMonitoring ? 'bg-yt-red border-yt-red text-white shadow-xl shadow-red-500/30' : 'bg-black/40 border-white/10 text-gray-400 hover:border-white/30'}`}
+             >
+               <div className={`w-2 h-2 rounded-full ${isMonitoring ? 'bg-white animate-pulse' : 'bg-gray-600'}`} />
+               {isMonitoring ? 'Live Defense Active' : 'Start Live Defense'}
+             </button>
+           )}
+           <div className="hidden sm:flex items-center gap-3 text-xs font-semibold text-gray-500 bg-black/40 px-5 py-2.5 rounded-2xl border border-white/5 shadow-2xl">
+            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+            GEMINI 3 PRO SECURE
+          </div>
         </div>
       </div>
 
@@ -225,36 +257,53 @@ const DetectorDashboard: React.FC<DetectorDashboardProps> = ({ onBack }) => {
           </div>
 
           {activeVideo && (
-            <div className="glass p-6 rounded-3xl border-white/10 flex items-center gap-6 animate-in slide-in-from-bottom duration-500">
-              <div className="relative group">
-                <div className="w-40 h-24 rounded-2xl bg-gradient-to-br from-red-600 to-black overflow-hidden relative shadow-2xl border border-white/10">
+            <div className={`glass p-6 rounded-3xl border flex flex-col sm:flex-row items-center gap-6 animate-in slide-in-from-bottom duration-500 transition-colors ${isMonitoring ? 'border-yt-red/40 bg-yt-red/5' : 'border-white/10'}`}>
+              <div className="relative group shrink-0">
+                <div className={`w-40 h-24 rounded-2xl bg-gradient-to-br from-red-600 to-black overflow-hidden relative shadow-2xl border ${isMonitoring ? 'border-yt-red/50' : 'border-white/10'}`}>
                    <div className="absolute inset-0 flex items-center justify-center opacity-30">
-                      <svg className="w-12 h-12" fill="currentColor" viewBox="0 0 24 24"><path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/></svg>
+                      <svg className={`w-12 h-12 ${isMonitoring ? 'text-yt-red' : 'text-white'}`} fill="currentColor" viewBox="0 0 24 24"><path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/></svg>
                    </div>
+                   {isMonitoring && (
+                     <div className="absolute inset-0 border-2 border-yt-red/50 rounded-2xl animate-pulse" />
+                   )}
                    <div className="absolute bottom-2 right-2 bg-black/80 px-1.5 py-0.5 rounded text-[10px] font-bold text-white">LIVE</div>
                 </div>
               </div>
-              <div>
+              <div className="flex-1">
                 <h3 className="text-lg font-bold line-clamp-1">{activeVideo.title}</h3>
                 <p className="text-gray-400 text-sm flex items-center gap-1.5 mt-1">
-                  <span className="w-2 h-2 rounded-full bg-yt-red" />
+                  <span className={`w-2 h-2 rounded-full ${isMonitoring ? 'bg-yt-red animate-ping' : 'bg-yt-red'}`} />
                   {activeVideo.channel}
                 </p>
-                <div className="mt-3 flex gap-4">
+                <div className="mt-3 flex flex-wrap gap-4">
                    <div className="text-[10px] text-gray-500 font-bold uppercase tracking-widest bg-white/5 px-2 py-1 rounded">ID: {activeVideo.id}</div>
-                   <div className="text-[10px] text-gray-500 font-bold uppercase tracking-widest bg-white/5 px-2 py-1 rounded">STREAMING ACTIVE</div>
+                   {isMonitoring ? (
+                     <div className="text-[10px] text-yt-red font-black uppercase tracking-widest bg-yt-red/10 px-2 py-1 rounded animate-pulse">Scanning Active...</div>
+                   ) : (
+                     <div className="text-[10px] text-gray-500 font-bold uppercase tracking-widest bg-white/5 px-2 py-1 rounded">Standby</div>
+                   )}
                 </div>
               </div>
             </div>
           )}
 
           <div className="space-y-6">
-            <h2 className="text-xl font-bold flex items-center gap-3">
-              Detection Log
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-600 bg-white/5 px-3 py-1 rounded-full border border-white/5">
-                {results.length} SAMPLES
-              </span>
-            </h2>
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-bold flex items-center gap-3">
+                Detection Log
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-600 bg-white/5 px-3 py-1 rounded-full border border-white/5">
+                  {results.length} SAMPLES
+                </span>
+              </h2>
+              {results.length > 0 && (
+                <button 
+                  onClick={() => setResults([])}
+                  className="text-[10px] font-black text-gray-600 hover:text-white transition-colors uppercase tracking-widest"
+                >
+                  Clear Log
+                </button>
+              )}
+            </div>
             
             <div className="grid grid-cols-1 gap-4">
               {results.length === 0 ? (
@@ -271,8 +320,8 @@ const DetectorDashboard: React.FC<DetectorDashboardProps> = ({ onBack }) => {
                 results.map((res, idx) => (
                   <div 
                     key={res.id} 
-                    className={`glass p-6 rounded-3xl border border-white/10 relative group animate-in slide-in-from-bottom duration-500`}
-                    style={{ animationDelay: `${idx * 100}ms` }}
+                    className={`glass p-6 rounded-3xl border relative group animate-in slide-in-from-top duration-500 transition-all ${idx === 0 && isMonitoring ? 'border-yt-red/30 shadow-lg shadow-yt-red/5' : 'border-white/10'}`}
+                    style={{ animationDelay: isMonitoring ? '0ms' : `${idx * 100}ms` }}
                   >
                     <div className="flex justify-between items-start mb-4">
                       <div className="flex items-center gap-3">
@@ -295,11 +344,9 @@ const DetectorDashboard: React.FC<DetectorDashboardProps> = ({ onBack }) => {
                           </div>
                         </div>
                       </div>
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                         <button className="text-gray-600 hover:text-white transition-colors">
-                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" /></svg>
-                         </button>
-                      </div>
+                      {idx === 0 && isMonitoring && (
+                        <div className="px-2 py-0.5 bg-yt-red/20 text-yt-red rounded text-[9px] font-black uppercase tracking-widest border border-yt-red/20">Just Analyzed</div>
+                      )}
                     </div>
                     
                     <div className="relative">
@@ -377,9 +424,9 @@ const DetectorDashboard: React.FC<DetectorDashboardProps> = ({ onBack }) => {
             <div className="relative pt-6 border-t border-white/5">
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest">Risk Distribution</h3>
-                <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-0.5 rounded text-[10px] font-bold text-emerald-500">
-                  <div className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" />
-                  LIVE CALIBRATION
+                <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${isMonitoring ? 'bg-yt-red/10 text-yt-red' : 'bg-emerald-500/10 text-emerald-500'}`}>
+                  <div className={`w-1 h-1 rounded-full animate-pulse ${isMonitoring ? 'bg-yt-red' : 'bg-emerald-500'}`} />
+                  {isMonitoring ? 'MONITORING FEED' : 'CALIBRATED'}
                 </div>
               </div>
               <div className="h-56 relative flex items-center justify-center">
