@@ -1,0 +1,5 @@
+{
+  "name": "SpamGuard AI - YouTube Comment Detector",
+  "description": "An advanced AI-powered tool to identify and filter spam, scams, and bot comments on YouTube using the Gemini model.",
+  "requestFramePermissions": []
+}
